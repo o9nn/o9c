@@ -1,0 +1,664 @@
+/**
+ * Deep Tree Echo Self - Operations Formal Specification
+ * =======================================================
+ * 
+ * This Z++ specification formalizes the core operations and state
+ * transitions of the Deep Tree Echo Self cognitive architecture.
+ *
+ * Version: 1.0
+ * Date: 2025-01-06
+ */
+
+include "data_model.zpp"
+include "system_state.zpp"
+
+/*
+ * ============================================================================
+ * SECTION 1: EMOTION TRIGGERING OPERATIONS
+ * ============================================================================
+ */
+
+/**
+ * Trigger Emotion Operation
+ * --------------------------
+ * Triggers a specific emotion with given intensity.
+ */
+schema TriggerEmotion
+  ΔCognitiveArchitecture
+  emotion_name? : EMOTION_NAME
+  intensity? : BOUNDED_REAL
+where
+  -- PRE-CONDITIONS
+  -- Emotion exists in the system
+  emotion_name? ∈ dom affective_agency.det.emotions
+  
+  -- Intensity is valid
+  0.0 ≤ intensity? ≤ 1.0
+  
+  -- POST-CONDITIONS
+  -- Update the specified emotion's intensity
+  affective_agency'.det.emotions(emotion_name?).intensity = 
+    min(1.0, affective_agency.det.emotions(emotion_name?).intensity + intensity?)
+  
+  -- Other emotions decay slightly
+  ∀ e : dom affective_agency'.det.emotions •
+    e ≠ emotion_name? ⇒
+      affective_agency'.det.emotions(e).intensity =
+        0.95 * affective_agency.det.emotions(e).intensity
+  
+  -- Record emotional event in history
+  ∃ new_snapshot : StateSnapshot •
+    new_snapshot.emotional_landscape(emotion_name?) = 
+      affective_agency'.det.emotions(emotion_name?).intensity
+  
+  -- Other components unchanged
+  membrane_system' = membrane_system
+  tree_esn' = tree_esn
+  bseries_forest' = bseries_forest
+  jsurface' = jsurface
+  gpt_engine' = gpt_engine
+  persona' = persona
+  emergence_metrics' = emergence_metrics
+end
+
+/**
+ * Update Emotions Dynamics Operation
+ * ------------------------------------
+ * Applies decay and contagion to all emotions.
+ */
+schema UpdateEmotionDynamics
+  ΔCognitiveArchitecture
+  dt? : POS_REAL
+where
+  -- PRE-CONDITIONS
+  -- Time step is reasonable
+  0.0 < dt? ≤ 1.0
+  
+  -- POST-CONDITIONS
+  -- Apply decay: I'(t) = I(t) - λ·I(t)·dt
+  ∀ e : dom affective_agency'.det.emotions •
+    let I = affective_agency.det.emotions(e).intensity
+        λ = affective_agency.det.decay_rate
+        decay = I - λ * I * dt?
+    in
+      -- Apply contagion: I'(t) = I(t) + Σ(C_ij · I_j) · dt
+      let contagion_idx = index_of(e, dom affective_agency.det.emotions)
+          contagion_sum = Σ{j : 1..#(dom affective_agency.det.emotions) •
+                           affective_agency.det.contagion_matrix(contagion_idx, j) *
+                           intensity_at_index(j, affective_agency.det.emotions)}
+          new_intensity = max(0.0, min(1.0, decay + contagion_sum * dt?))
+      in
+        affective_agency'.det.emotions(e).intensity = new_intensity
+  
+  -- Update emotional blend vector
+  affective_agency'.det.blend = 
+    ⟨affective_agency'.det.emotions(e).intensity | 
+     e : dom affective_agency'.det.emotions⟩
+  
+  -- Other components unchanged
+  membrane_system' = membrane_system
+  tree_esn' = tree_esn
+  bseries_forest' = bseries_forest
+  jsurface' = jsurface
+  gpt_engine' = gpt_engine
+  persona' = persona
+  state_history' = state_history
+  emergence_metrics' = emergence_metrics
+end
+
+/**
+ * Compute Cognitive Modulation Operation
+ * ----------------------------------------
+ * Computes cognitive parameters modulated by emotional state.
+ */
+schema ComputeCognitiveModulation
+  ΔCognitiveArchitecture
+where
+  -- PRE-CONDITIONS
+  -- At least one emotion is active
+  ∃ e : ran affective_agency.det.emotions • e.intensity > 0.0
+  
+  -- POST-CONDITIONS
+  -- Compute attention scope as weighted average
+  let total_intensity = Σ{e : ran affective_agency.det.emotions • e.intensity}
+      weighted_scope = Σ{e : ran affective_agency.det.emotions • 
+                         e.intensity * e.attention_scope}
+  in
+    affective_agency'.attention_scope = 
+      if total_intensity > 0.0 
+      then weighted_scope / total_intensity
+      else 0.5
+  
+  -- Compute learning rate modulated by arousal
+  let avg_arousal = Σ{e : ran affective_agency.det.emotions • 
+                      e.intensity * e.arousal} / 
+                    max(1.0, total_intensity)
+  in
+    affective_agency'.learning_rate = 0.1 * (1.0 + 0.5 * avg_arousal)
+  
+  -- Compute decision threshold based on approach/avoid
+  let weighted_approach = Σ{e : ran affective_agency.det.emotions •
+                            e.intensity * e.approach_avoid}
+  in
+    affective_agency'.decision_threshold = 
+      weighted_approach / max(1.0, total_intensity)
+  
+  -- Other components of affective agency unchanged
+  affective_agency'.det = affective_agency.det
+  
+  -- Other system components unchanged
+  membrane_system' = membrane_system
+  tree_esn' = tree_esn
+  bseries_forest' = bseries_forest
+  jsurface' = jsurface
+  gpt_engine' = gpt_engine
+  persona' = persona
+  state_history' = state_history
+  emergence_metrics' = emergence_metrics
+end
+
+/*
+ * ============================================================================
+ * SECTION 2: MEMBRANE PROCESSING OPERATIONS
+ * ============================================================================
+ */
+
+/**
+ * Modulate Membrane Permeability Operation
+ * -----------------------------------------
+ * Adjusts membrane permeability based on emotional state.
+ */
+schema ModulateMembranePermeability
+  ΔCognitiveArchitecture
+where
+  -- PRE-CONDITIONS
+  -- Affective agency has valid emotional state
+  ∀ e : ran affective_agency.det.emotions •
+    0.0 ≤ e.intensity ≤ 1.0
+  
+  -- POST-CONDITIONS
+  -- Calculate openness emotions (positive effect on permeability)
+  let openness = 
+        get_intensity(wonder, affective_agency.det.emotions) +
+        get_intensity(curiosity, affective_agency.det.emotions) +
+        get_intensity(joy, affective_agency.det.emotions)
+      
+      -- Calculate closure emotions (negative effect on permeability)
+      closure = 
+        get_intensity(fear, affective_agency.det.emotions) +
+        get_intensity(anxiety, affective_agency.det.emotions) +
+        get_intensity(sadness, affective_agency.det.emotions)
+      
+      -- Net openness effect
+      net_openness = openness - closure
+  in
+    -- Update each membrane's permeability
+    ∀ m : dom membrane_system'.membranes •
+      let base_perm = 0.7 - 0.1 * membrane_system.membranes(m).depth
+          modulated = base_perm + 0.1 * net_openness
+          clamped = max(0.1, min(0.9, modulated))
+      in
+        membrane_system'.membranes(m).permeability = clamped
+  
+  -- Membrane structure and states unchanged
+  ∀ m : dom membrane_system'.membranes •
+    membrane_system'.membranes(m).id = membrane_system.membranes(m).id ∧
+    membrane_system'.membranes(m).depth = membrane_system.membranes(m).depth ∧
+    membrane_system'.membranes(m).state = membrane_system.membranes(m).state ∧
+    membrane_system'.membranes(m).children = membrane_system.membranes(m).children ∧
+    membrane_system'.membranes(m).parent = membrane_system.membranes(m).parent
+  
+  -- Other components unchanged
+  tree_esn' = tree_esn
+  bseries_forest' = bseries_forest
+  jsurface' = jsurface
+  affective_agency' = affective_agency
+  gpt_engine' = gpt_engine
+  persona' = persona
+  state_history' = state_history
+  emergence_metrics' = emergence_metrics
+end
+
+/**
+ * Apply Membrane Rules Operation
+ * --------------------------------
+ * Applies transformation rules and handles inter-membrane communication.
+ */
+schema ApplyMembraneRules
+  ΔCognitiveArchitecture
+  dt? : POS_REAL
+where
+  -- PRE-CONDITIONS
+  -- Time step is reasonable
+  0.0 < dt? ≤ 1.0
+  
+  -- All membranes have valid states
+  ∀ m : ran membrane_system.membranes •
+    #m.state = membrane_system.dim
+  
+  -- POST-CONDITIONS
+  -- Process bottom-up (from leaves to root)
+  ∀ d : depth..0 by -1 •
+    ∀ m : {mem : ran membrane_system.membranes | mem.depth = d} •
+      -- Apply transformation rules sequentially
+      let state₀ = m.state
+          state₁ = tanh_vector(state₀)
+          state₂ = normalize_vector(state₁)
+          state₃ = sparse_code(state₂, 0.3)
+      in
+        membrane_system'.membranes(m.id).state = state₃
+      
+      -- Communicate with parent if exists
+      ∧ (m.parent ≠ null ⇒
+          let parent = membrane_system.membranes(m.parent)
+              flow = m.permeability × membrane_system'.membranes(m.id).state
+              contribution = (dt? × flow) / #(parent.children)
+          in
+            membrane_system'.membranes(m.parent).state = 
+              parent.state ⊕ contribution)
+  
+  -- Membrane structure unchanged
+  membrane_system'.root_id = membrane_system.root_id
+  membrane_system'.depth = membrane_system.depth
+  membrane_system'.dim = membrane_system.dim
+  membrane_system'.graph = membrane_system.graph
+  
+  -- Other components unchanged
+  tree_esn' = tree_esn
+  bseries_forest' = bseries_forest
+  jsurface' = jsurface
+  affective_agency' = affective_agency
+  gpt_engine' = gpt_engine
+  persona' = persona
+  state_history' = state_history
+  emergence_metrics' = emergence_metrics
+end
+
+/*
+ * ============================================================================
+ * SECTION 3: RESERVOIR PROCESSING OPERATIONS
+ * ============================================================================
+ */
+
+/**
+ * Process Tree ESN Operation
+ * ---------------------------
+ * Updates all reservoir nodes with input propagation.
+ */
+schema ProcessTreeESN
+  ΔCognitiveArchitecture
+  input? : Vector[input_dim]
+where
+  -- PRE-CONDITIONS
+  -- Input has correct dimension
+  #input? = input_dim
+  
+  -- Input is bounded
+  ∀ i : 1..input_dim • -10.0 ≤ input?(i) ≤ 10.0
+  
+  -- POST-CONDITIONS
+  -- Process all nodes (top-down for input, bottom-up for aggregation)
+  let leak_rate = tree_esn.persona_params.leak_rate in
+    
+    -- Update root node
+    let root = tree_esn.root
+        activation = root.W_in · input? + root.W_res · root.state
+        new_state = (1 - leak_rate) × root.state ⊕ 
+                    leak_rate × tanh_vector(activation)
+    in
+      tree_esn'.all_nodes(root.id).state = new_state
+    
+    -- Update all other nodes (breadth-first)
+    ∧ ∀ n : {node : ran tree_esn.all_nodes | node.id ≠ root.id} •
+        let parent = tree_esn.all_nodes(n.parent)
+            parent_contribution = parent.state[1..input_dim]
+            activation = n.W_in · parent_contribution + n.W_res · n.state
+            new_state = (1 - leak_rate) × n.state ⊕ 
+                       leak_rate × tanh_vector(activation)
+        in
+          tree_esn'.all_nodes(n.id).state = new_state
+  
+  -- ESN structure unchanged
+  tree_esn'.root = tree_esn.root
+  tree_esn'.depth = tree_esn.depth
+  tree_esn'.persona_params = tree_esn.persona_params
+  tree_esn'.reservoir_size = tree_esn.reservoir_size
+  tree_esn'.input_dim = tree_esn.input_dim
+  
+  -- Other components unchanged
+  membrane_system' = membrane_system
+  bseries_forest' = bseries_forest
+  jsurface' = jsurface
+  affective_agency' = affective_agency
+  gpt_engine' = gpt_engine
+  persona' = persona
+  state_history' = state_history
+  emergence_metrics' = emergence_metrics
+end
+
+/*
+ * ============================================================================
+ * SECTION 4: TEMPORAL INTEGRATION OPERATIONS
+ * ============================================================================
+ */
+
+/**
+ * Apply B-Series Step Operation
+ * -------------------------------
+ * Performs one step of Butcher B-series integration.
+ */
+schema ApplyBSeriesStep
+  ΔCognitiveArchitecture
+  vector_field? : Vector[input_dim] → Vector[input_dim]
+  state? : Vector[input_dim]
+  dt? : POS_REAL
+  integrated_state! : Vector[input_dim]
+where
+  -- PRE-CONDITIONS
+  -- State has correct dimension
+  #state? = input_dim
+  
+  -- Time step is reasonable
+  0.0 < dt? ≤ 1.0
+  
+  -- POST-CONDITIONS
+  -- Apply RK4 integration (default method)
+  bseries_forest.method = rk4 ⇒
+    let k₁ = vector_field?(state?)
+        k₂ = vector_field?(state? ⊕ (dt? / 2.0) × k₁)
+        k₃ = vector_field?(state? ⊕ (dt? / 2.0) × k₂)
+        k₄ = vector_field?(state? ⊕ dt? × k₃)
+    in
+      integrated_state! = state? ⊕ 
+                         (dt? / 6.0) × (k₁ ⊕ 2×k₂ ⊕ 2×k₃ ⊕ k₄)
+  
+  -- Apply Euler integration (simple method)
+  ∨ bseries_forest.method = euler ⇒
+      integrated_state! = state? ⊕ dt? × vector_field?(state?)
+  
+  -- Apply midpoint integration
+  ∨ bseries_forest.method = midpoint ⇒
+      let k₁ = vector_field?(state?)
+          k₂ = vector_field?(state? ⊕ (dt? / 2.0) × k₁)
+      in
+        integrated_state! = state? ⊕ dt? × k₂
+  
+  -- Integrated state is bounded
+  ∀ i : 1..input_dim • -100.0 ≤ integrated_state!(i) ≤ 100.0
+  
+  -- System state unchanged (pure function)
+  ΞCognitiveArchitecture
+end
+
+/**
+ * Project to J-Surface Operation
+ * --------------------------------
+ * Projects state onto the J-surface manifold.
+ */
+schema ProjectToJSurface
+  ΔCognitiveArchitecture
+  state? : Vector[input_dim]
+  projected_state! : Vector[input_dim]
+where
+  -- PRE-CONDITIONS
+  -- State has correct dimension
+  #state? = input_dim
+  
+  -- J-surface metric is positive definite
+  ∀ v : Vector[input_dim] •
+    v ≠ zero_vector(input_dim) ⇒ 
+      vᵀ · jsurface.metric · v > 0.0
+  
+  -- POST-CONDITIONS
+  -- Project onto manifold using Riemannian metric
+  let distance_to_surface = 
+        λ v : Vector[input_dim] • 
+          sqrt(vᵀ · jsurface.metric · v)
+      
+      -- Find closest point on manifold (gradient descent)
+      closest_point = minimize_distance(state?, jsurface.critical_points, 
+                                       jsurface.metric)
+  in
+    -- Projection is geodesic from state to closest critical point
+    projected_state! = 
+      if distance_to_surface(state? ⊖ closest_point) < 0.1
+      then closest_point
+      else state? ⊖ 0.5 × (state? ⊖ closest_point)
+  
+  -- Update J-surface curvature based on projection
+  jsurface'.curvature = 
+    compute_curvature(projected_state!, jsurface.metric)
+  
+  -- Projected state has correct dimension
+  #projected_state! = input_dim
+  
+  -- Other J-surface components unchanged
+  jsurface'.dimension = jsurface.dimension
+  jsurface'.differentials = jsurface.differentials
+  jsurface'.metric = jsurface.metric
+  jsurface'.critical_points = jsurface.critical_points
+  
+  -- Other system components unchanged
+  membrane_system' = membrane_system
+  tree_esn' = tree_esn
+  bseries_forest' = bseries_forest
+  affective_agency' = affective_agency
+  gpt_engine' = gpt_engine
+  persona' = persona
+  state_history' = state_history
+  emergence_metrics' = emergence_metrics
+end
+
+/*
+ * ============================================================================
+ * SECTION 5: MAIN PROCESSING OPERATION
+ * ============================================================================
+ */
+
+/**
+ * Complete Process Operation
+ * ---------------------------
+ * Orchestrates the complete processing pipeline.
+ */
+schema Process
+  ΔCognitiveArchitecture
+  input? : Vector[input_dim]
+  emotion_triggers? : EMOTION_NAME ⇸ BOUNDED_REAL
+  dt? : POS_REAL
+  output! : Vector[input_dim]
+where
+  -- PRE-CONDITIONS
+  -- Input has correct dimension and is bounded
+  #input? = input_dim ∧
+  ∀ i : 1..input_dim • -10.0 ≤ input?(i) ≤ 10.0
+  
+  -- Time step is reasonable
+  0.0 < dt? ≤ 1.0
+  
+  -- All triggered emotions exist
+  dom emotion_triggers? ⊆ dom affective_agency.det.emotions
+  
+  -- POST-CONDITIONS
+  -- Step 1: Trigger emotions
+  ∀ (e, intensity) : emotion_triggers? •
+    ∃ TriggerEmotion • 
+      emotion_name? = e ∧ intensity? = intensity
+  
+  -- Step 2: Update emotion dynamics
+  ∧ ∃ UpdateEmotionDynamics • true
+  
+  -- Step 3: Compute cognitive modulation
+  ∧ ∃ ComputeCognitiveModulation • true
+  
+  -- Step 4: Modulate membrane permeability
+  ∧ ∃ ModulateMembranePermeability • true
+  
+  -- Step 5: Inject input at root and process membranes
+  ∧ membrane_system'.membranes(membrane_system.root_id).state = input?
+  ∧ ∃ ApplyMembraneRules • true
+  
+  -- Step 6: Process tree ESN with filtered input
+  ∧ let filtered_input = membrane_system'.membranes(membrane_system.root_id).state
+    in
+      ∃ ProcessTreeESN • input? = filtered_input
+  
+  -- Step 7: Temporal integration via B-series
+  ∧ let vector_field = create_cognitive_dynamics(input_dim, 1.0, 0.5)
+        integrated_state : Vector[input_dim]
+    in
+      ∃ ApplyBSeriesStep • 
+        state? = filtered_input ∧
+        integrated_state! = integrated_state
+  
+  -- Step 8: Geometric projection via J-surface
+  ∧ let projected_state : Vector[input_dim]
+    in
+      ∃ ProjectToJSurface •
+        state? = integrated_state ∧
+        projected_state! = projected_state
+  
+  -- Step 9: GPT integration (if available)
+  ∧ (gpt_engine ≠ null ⇒
+      let token_ids = discretize(projected_state, gpt_engine.vocab_size)
+          gpt_output, attention_maps = forward_gpt(gpt_engine, token_ids)
+          reservoir_state = collect_reservoir_states(tree_esn')
+      in
+        output! = integrate_gpt_reservoir(gpt_output, reservoir_state))
+  ∨ (gpt_engine = null ⇒ output! = projected_state)
+  
+  -- Step 10: Record state
+  ∧ ∃ new_snapshot : StateSnapshot •
+      new_snapshot.timestamp = #state_history ∧
+      new_snapshot.input = input? ∧
+      new_snapshot.output = output! ∧
+      new_snapshot.input_dim = input_dim ∧
+      new_snapshot.output_dim = input_dim ∧
+      state_history' = state_history ⌢ ⟨new_snapshot⟩
+  
+  -- Step 11: Compute emergence metrics
+  ∧ #state_history' ≥ 2 ⇒ ∃ ComputeEmergenceMetrics • true
+  
+  -- Output has correct dimension and is bounded
+  #output! = input_dim ∧
+  ∀ i : 1..input_dim • -100.0 ≤ output!(i) ≤ 100.0
+end
+
+/*
+ * ============================================================================
+ * SECTION 6: EMERGENCE COMPUTATION OPERATIONS
+ * ============================================================================
+ */
+
+/**
+ * Compute Emergence Metrics Operation
+ * -------------------------------------
+ * Computes wisdom and other emergence metrics from state history.
+ */
+schema ComputeEmergenceMetrics
+  ΔCognitiveArchitecture
+where
+  -- PRE-CONDITIONS
+  -- Sufficient history exists
+  #state_history ≥ 2
+  
+  -- POST-CONDITIONS
+  let n_recent = min(10, #state_history)
+      recent_history = state_history[(#state_history - n_recent + 1)..#state_history]
+  in
+    -- Compute complexity (state entropy)
+    let reservoir_states_seq = ⟨s.reservoir_states | s : recent_history⟩
+        state_matrix = matrix_from_vectors(reservoir_states_seq)
+        covariance = cov(state_matrix)
+        complexity_raw = 0.5 * log(det(covariance + 1e-6 × I))
+    in
+      emergence_metrics'.complexity = clamp(complexity_raw / 10.0, 0.0, 1.0)
+    
+    -- Compute coherence (subsystem correlation)
+    ∧ let permeabilities = ⟨mean(s.membrane_permeability) | s : recent_history⟩
+          emotions = ⟨s.emotional_landscape(wonder) | s : recent_history⟩
+          curvatures = ⟨s.jsurface_curvature | s : recent_history⟩
+          
+          cor_pe = if var(permeabilities) > 1e-6 ∧ var(emotions) > 1e-6
+                   then |cor(permeabilities, emotions)| else 0.5
+          cor_ec = if var(emotions) > 1e-6 ∧ var(curvatures) > 1e-6
+                   then |cor(emotions, curvatures)| else 0.5
+          cor_pc = if var(permeabilities) > 1e-6 ∧ var(curvatures) > 1e-6
+                   then |cor(permeabilities, curvatures)| else 0.5
+      in
+        emergence_metrics'.coherence = (cor_pe + cor_ec + cor_pc) / 3.0
+    
+    -- Compute stability (trajectory variance)
+    ∧ let outputs = ⟨s.output | s : recent_history⟩
+          output_matrix = matrix_from_vectors(outputs)
+          trajectory_var = mean_variance(output_matrix)
+      in
+        emergence_metrics'.stability = 1.0 / (1.0 + trajectory_var)
+    
+    -- Compute adaptability (input-output coupling)
+    ∧ (#recent_history ≥ 2 ⇒
+        let input_diffs = ⟨norm(recent_history(i).input ⊖ recent_history(i-1).input) |
+                          i : 2..#recent_history⟩
+            output_diffs = ⟨norm(recent_history(i).output ⊖ recent_history(i-1).output) |
+                           i : 2..#recent_history⟩
+            adaptability_raw = if var(input_diffs) > 1e-6 ∧ var(output_diffs) > 1e-6
+                               then |cor(input_diffs, output_diffs)| else 0.5
+        in
+          emergence_metrics'.adaptability = clamp(adaptability_raw, 0.0, 1.0))
+    
+    -- Compute wisdom (balanced optimization)
+    ∧ emergence_metrics'.wisdom = 
+        (emergence_metrics'.coherence + 
+         emergence_metrics'.stability + 
+         0.5 * emergence_metrics'.complexity + 
+         0.5 * emergence_metrics'.adaptability) / 3.0
+  
+  -- Other components unchanged
+  membrane_system' = membrane_system
+  tree_esn' = tree_esn
+  bseries_forest' = bseries_forest
+  jsurface' = jsurface
+  affective_agency' = affective_agency
+  gpt_engine' = gpt_engine
+  persona' = persona
+  state_history' = state_history
+end
+
+/*
+ * ============================================================================
+ * AUXILIARY FUNCTIONS
+ * ============================================================================
+ */
+
+function get_intensity : (EMOTION_NAME × (EMOTION_NAME ⇸ Emotion)) → BOUNDED_REAL
+  get_intensity(name, emotions) = 
+    if name ∈ dom emotions 
+    then emotions(name).intensity 
+    else 0.0
+
+function tanh_vector : Vector[n] → Vector[n]
+  tanh_vector(v) = ⟨tanh(v(i)) | i : 1..#v⟩
+
+function normalize_vector : Vector[n] → Vector[n]
+  normalize_vector(v) = v ⊘ (1.0 + norm(v))
+
+function sparse_code : Vector[n] × ℝ → Vector[n]
+  sparse_code(v, threshold) = 
+    ⟨if |v(i)| > threshold then v(i) else 0.0 | i : 1..#v⟩
+
+function create_cognitive_dynamics : DIM × ℝ × ℝ → (Vector[n] → Vector[n])
+  create_cognitive_dynamics(dim, attraction, coupling) =
+    λ x : Vector[dim] • 
+      ⟨-attraction * x(i) + coupling * Σ{j : 1..dim, j≠i • x(j)} | i : 1..dim⟩
+
+function clamp : ℝ × ℝ × ℝ → ℝ
+  clamp(x, lo, hi) = max(lo, min(hi, x))
+
+function collect_reservoir_states : DeepTreeESN → Vector[n]
+  collect_reservoir_states(esn) =
+    concatenate(⟨node.state | node : ran esn.all_nodes⟩)
+
+/*
+ * ============================================================================
+ * END OF OPERATIONS SPECIFICATION
+ * ============================================================================
+ */
