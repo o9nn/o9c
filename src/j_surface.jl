@@ -328,4 +328,3 @@ function optimize_trajectory(surface::JSurfaceDifferential,
     return trajectory
 end
 
-end  # of included file scope

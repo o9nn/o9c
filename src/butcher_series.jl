@@ -307,4 +307,3 @@ function create_cognitive_dynamics(dim::Int;
     return f
 end
 
-end  # of included file scope

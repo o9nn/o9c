@@ -286,5 +286,3 @@ function train_readout!(esn::DeepTreeESN, inputs::Vector{Vector{Float64}},
     # Assign to root node (for simplicity, could distribute across nodes)
     esn.root.W_out = W'
 end
-
-end  # of included file scope

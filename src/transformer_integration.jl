@@ -429,4 +429,3 @@ function extract_relevance_landscape(attention_maps::Vector)
     )
 end
 
-end  # of included file scope

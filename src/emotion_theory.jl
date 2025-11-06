@@ -389,4 +389,3 @@ function get_emotional_landscape(agency::AffectiveAgency)
     )
 end
 
-end  # of included file scope

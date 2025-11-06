@@ -194,4 +194,3 @@ function modulate_permeability!(system::PaunMembraneSystem, emotion_state::Dict{
     end
 end
 
-end  # of included file scope

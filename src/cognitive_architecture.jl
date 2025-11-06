@@ -453,4 +453,3 @@ function set_persona!(arch::CognitiveArchitecture, persona::Symbol)
     end
 end
 
-end  # of included file scope
