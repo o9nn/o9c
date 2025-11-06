@@ -64,7 +64,19 @@ mutable struct ReservoirNode
         # Initialize reservoir weights with controlled spectral radius
         W_res = randn(reservoir_size, reservoir_size)
         # Scale to desired spectral radius for echo state property
-        ρ = maximum(abs.(eigvals(W_res)))
+        # Use power iteration for large matrices (more efficient than full eigendecomposition)
+        if reservoir_size > 100
+            # Power iteration to estimate largest eigenvalue
+            v = randn(reservoir_size)
+            for _ in 1:20
+                v = W_res * v
+                v = v / norm(v)
+            end
+            ρ = norm(W_res * v) / norm(v)
+        else
+            # For small matrices, use exact eigenvalue computation
+            ρ = maximum(abs.(eigvals(W_res)))
+        end
         W_res = (spectral_radius / ρ) * W_res
         
         # Output weights (to be learned)
@@ -232,9 +244,12 @@ function process_tree!(esn::DeepTreeESN, input::Vector{Float64})
             avg_child_state = mean(child_states)
             
             # Integrate child information into parent
-            # Use reservoir weights to mix child aggregate with own state
-            integration = node.W_res * avg_child_state[1:length(node.state)]
-            node.state = 0.7 * node.state + 0.3 * tanh.(integration)
+            # Handle dimension mismatch by taking appropriate slice
+            child_dim = min(length(avg_child_state), length(node.state))
+            integration = node.W_res * avg_child_state[1:child_dim]
+            # Mix with appropriate weighting
+            state_dim = min(length(integration), length(node.state))
+            node.state[1:state_dim] = 0.7 * node.state[1:state_dim] + 0.3 * tanh.(integration[1:state_dim])
             
             return node.state
         end

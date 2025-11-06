@@ -74,6 +74,11 @@ mutable struct AttentionHead
         W_v = init_scale * randn(dim, dim)
         scale = 1.0 / sqrt(dim)
         
+        # Pre-transpose for efficiency in forward pass
+        W_q = W_q'
+        W_k = W_k'
+        W_v = W_v'
+        
         new(dim, W_q, W_k, W_v, scale)
     end
 end
@@ -91,10 +96,10 @@ Compute attention output for a sequence.
 Attended output (seq_len × dim)
 """
 function compute_attention(head::AttentionHead, X::Matrix{Float64}; mask=nothing)
-    # Compute queries, keys, values
-    Q = X * head.W_q'
-    K = X * head.W_k'
-    V = X * head.W_v'
+    # Compute queries, keys, values (weights are pre-transposed)
+    Q = X * head.W_q
+    K = X * head.W_k
+    V = X * head.W_v
     
     # Compute attention scores
     scores = (Q * K') * head.scale

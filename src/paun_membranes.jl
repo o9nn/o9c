@@ -91,7 +91,7 @@ struct PaunMembraneSystem
                 for _ in 1:branching
                     id_counter += 1
                     child_id = id_counter
-                    m.children = push!(m.children, child_id)
+                    push!(m.children, child_id)
                     push!(queue, (child_id, current_depth + 1))
                 end
             end

@@ -75,7 +75,8 @@ mutable struct JSurfaceDifferential
         for order in 1:max_order
             for dim in 1:dimension
                 # Create differential for this order and dimension
-                coeff = 1.0 / factorial(order)
+                # Use simple coefficient scaling instead of factorial
+                coeff = 1.0 / (order * order)  # Quadratic decay with order
                 diff = ElementaryDifferential(order, tree_id, coeff, dim)
                 push!(differentials, diff)
                 tree_id += 1
@@ -185,7 +186,7 @@ function find_critical_points!(surface::JSurfaceDifferential, vector_field::Func
             end
             
             # Move toward critical point
-            x .- = 0.1 * dx
+            x = x .- 0.1 * dx
         end
     end
     
