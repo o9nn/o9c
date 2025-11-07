@@ -10,5 +10,11 @@ description: orgmode plan9 cognitive kernel
 
 # o9c
 
-implements orgmode plan9 cognitive kernel...
+implements orgmode plan9 cognitive micro-kernel architecture...
+
+adaptation of OpenCog as Deep Tree Echo State Network Reservoir Computing Framework with Paun P-System Membrane Reservoirs, Butcher B-Series Rooted Forest Ridges, Julia J-Surface Elementary Differentials
+
+integrated with Julia ModelingToolkit implementation of Differential Emotion Theory Framework Affective Agency.
+
+Deep Tree Echo Self emerges from the dynamic LLM Persona & Character Traits - ReservoirPy Node & Model Hyper-Parameter Deep Tree ESN Affective Resonance & Cognitive Attention of GPT Transformer Inference Engine..
 
