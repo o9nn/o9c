@@ -1,0 +1,628 @@
+/**
+ * Deep Tree Echo Self - External Integration Contracts
+ * ======================================================
+ * 
+ * This Z++ specification formalizes the contracts for external
+ * integrations including ReservoirPy, PyCall, and other external systems.
+ *
+ * Version: 1.0
+ * Date: 2025-01-06
+ */
+
+include "data_model.zpp"
+include "system_state.zpp"
+
+/*
+ * ============================================================================
+ * SECTION 1: PYTHON INTEGRATION VIA PYCALL
+ * ============================================================================
+ */
+
+/**
+ * PyCall Bridge Schema
+ * --------------------
+ * Defines the interface between Julia and Python environments.
+ */
+schema PyCallBridge
+  py_object : PyObject ∪ {null}
+  is_initialized : 𝔹
+  error_state : {none, import_error, call_error, type_error}
+where
+  -- PyObject exists iff initialized
+  is_initialized ⇔ py_object ≠ null
+  
+  -- No error when properly initialized
+  is_initialized ∧ error_state ≠ import_error ⇒
+    py_object ≠ null
+  
+  -- Error state consistency
+  error_state = none ⇔ is_initialized
+end
+
+/**
+ * Initialize PyCall Operation
+ * ----------------------------
+ * Initializes the Python bridge for external library access.
+ */
+schema InitializePyCall
+  PyCallBridge'
+  library_name? : STRING
+  success! : 𝔹
+where
+  -- PRE-CONDITIONS
+  -- Library name is non-empty
+  #library_name? > 0
+  
+  -- POST-CONDITIONS
+  -- Attempt to import library
+  (∃ py_module : PyObject •
+    py_module = pyimport(library_name?) ∧
+    py_object' = py_module ∧
+    is_initialized' = true ∧
+    error_state' = none ∧
+    success! = true)
+  
+  -- Handle import failure
+  ∨ (py_object' = null ∧
+     is_initialized' = false ∧
+     error_state' = import_error ∧
+     success! = false)
+end
+
+/*
+ * ============================================================================
+ * SECTION 2: RESERVOIRPY INTEGRATION
+ * ============================================================================
+ */
+
+/**
+ * ReservoirPy Configuration Schema
+ * ---------------------------------
+ * Configuration for ReservoirPy reservoir computing library.
+ */
+schema ReservoirPyConfig
+  reservoir_size : ℕ₁
+  spectral_radius : BOUNDED_REAL
+  input_scaling : BOUNDED_REAL
+  leak_rate : BOUNDED_REAL
+  connectivity : BOUNDED_REAL
+  input_connectivity : BOUNDED_REAL
+  ridge_alpha : POS_REAL
+where
+  -- Spectral radius less than 1 for Echo State Property
+  0.5 ≤ spectral_radius < 1.0
+  
+  -- Input scaling typically between 0.1 and 1.0
+  0.1 ≤ input_scaling ≤ 1.0
+  
+  -- Leak rate between 0.1 and 1.0
+  0.1 ≤ leak_rate ≤ 1.0
+  
+  -- Connectivity (sparsity) between 0.01 and 1.0
+  0.01 ≤ connectivity ≤ 1.0
+  
+  -- Input connectivity between 0.1 and 1.0
+  0.1 ≤ input_connectivity ≤ 1.0
+  
+  -- Ridge regression regularization
+  ridge_alpha > 0.0
+end
+
+/**
+ * ReservoirPy Instance Schema
+ * ----------------------------
+ * Represents a ReservoirPy reservoir instance.
+ */
+schema ReservoirPyInstance
+  PyCallBridge
+  config : ReservoirPyConfig
+  py_reservoir : PyObject ∪ {null}
+  is_trained : 𝔹
+  readout_weights : Matrix[output_dim, reservoir_size] ∪ {null}
+  output_dim : DIM
+  reservoir_size : ℕ₁
+where
+  -- Reservoir exists iff initialized
+  is_initialized ⇒ py_reservoir ≠ null
+  
+  -- Trained iff readout weights exist
+  is_trained ⇔ readout_weights ≠ null
+  
+  -- Reservoir size matches config
+  reservoir_size = config.reservoir_size
+  
+  -- Readout weights have correct dimensions when trained
+  is_trained ⇒
+    rows(readout_weights) = output_dim ∧
+    cols(readout_weights) = reservoir_size
+end
+
+/**
+ * Create ReservoirPy Reservoir Operation
+ * ----------------------------------------
+ * Creates a new ReservoirPy reservoir instance.
+ */
+schema CreateReservoirPyReservoir
+  ReservoirPyInstance'
+  config? : ReservoirPyConfig
+  input_dim? : DIM
+  output_dim? : DIM
+  success! : 𝔹
+where
+  -- PRE-CONDITIONS
+  -- PyCall is initialized
+  is_initialized
+  
+  -- POST-CONDITIONS
+  -- Attempt to create reservoir
+  (∃ rpy_module : PyObject •
+    rpy_module = py_object ∧
+    py_reservoir' = rpy_module.nodes.Reservoir(
+      units = config?.reservoir_size,
+      sr = config?.spectral_radius,
+      input_scaling = config?.input_scaling,
+      lr = config?.leak_rate,
+      rc_connectivity = config?.connectivity,
+      input_connectivity = config?.input_connectivity
+    ) ∧
+    config' = config? ∧
+    output_dim' = output_dim? ∧
+    reservoir_size' = config?.reservoir_size ∧
+    is_trained' = false ∧
+    readout_weights' = null ∧
+    success! = true)
+  
+  -- Handle creation failure
+  ∨ (py_reservoir' = null ∧
+     error_state' = call_error ∧
+     success! = false)
+end
+
+/**
+ * Train ReservoirPy Reservoir Operation
+ * ---------------------------------------
+ * Trains the reservoir using Ridge regression.
+ */
+schema TrainReservoirPyReservoir
+  ΔReservoirPyInstance
+  training_inputs? : seq Vector[input_dim]
+  training_outputs? : seq Vector[output_dim]
+  input_dim? : DIM
+  success! : 𝔹
+where
+  -- PRE-CONDITIONS
+  -- Reservoir is initialized but not yet trained
+  is_initialized ∧ py_reservoir ≠ null
+  
+  -- Training data is non-empty and aligned
+  #training_inputs? > 0 ∧
+  #training_inputs? = #training_outputs?
+  
+  -- All inputs and outputs have correct dimensions
+  ∀ inp : ran training_inputs? • #inp = input_dim?
+  ∀ out : ran training_outputs? • #out = output_dim
+  
+  -- POST-CONDITIONS
+  -- Run reservoir on training inputs to collect states
+  let reservoir_states = 
+        ⟨py_reservoir.run(convert_to_numpy(inp)) | 
+         inp : training_inputs?⟩
+  in
+    -- Train readout using Ridge regression
+    (∃ ridge : PyObject •
+      ridge = py_object.nodes.Ridge(ridge = config.ridge_alpha) ∧
+      ridge.fit(
+        convert_to_numpy(reservoir_states),
+        convert_to_numpy(training_outputs?)
+      ) ∧
+      readout_weights' = convert_from_numpy(ridge.W) ∧
+      is_trained' = true ∧
+      success! = true)
+  
+  -- Handle training failure
+  ∨ (readout_weights' = readout_weights ∧
+     is_trained' = false ∧
+     error_state' = call_error ∧
+     success! = false)
+  
+  -- Configuration and reservoir unchanged
+  config' = config
+  py_reservoir' = py_reservoir
+  output_dim' = output_dim
+  reservoir_size' = reservoir_size
+end
+
+/**
+ * Run ReservoirPy Reservoir Operation
+ * -------------------------------------
+ * Runs the trained reservoir on new input.
+ */
+schema RunReservoirPyReservoir
+  ΞReservoirPyInstance
+  input? : Vector[input_dim]
+  input_dim? : DIM
+  output! : Vector[output_dim]
+  success! : 𝔹
+where
+  -- PRE-CONDITIONS
+  -- Reservoir is trained
+  is_trained ∧ readout_weights ≠ null
+  
+  -- Input has correct dimension
+  #input? = input_dim?
+  
+  -- POST-CONDITIONS
+  -- Run reservoir to get state
+  let reservoir_state = py_reservoir.run(convert_to_numpy(input?))
+      state_vector = convert_from_numpy(reservoir_state)
+  in
+    -- Compute output using readout weights
+    output! = readout_weights · state_vector ∧
+    success! = true
+  
+  -- Handle execution failure
+  ∨ (output! = zero_vector(output_dim) ∧
+     success! = false)
+  
+  -- Output has correct dimension
+  #output! = output_dim
+end
+
+/*
+ * ============================================================================
+ * SECTION 3: DATA CONVERSION CONTRACTS
+ * ============================================================================
+ */
+
+/**
+ * Julia to NumPy Conversion Schema
+ * ----------------------------------
+ * Converts Julia arrays to NumPy arrays for Python interop.
+ */
+schema ConvertToNumPy
+  julia_array : Vector[n] ∨ Matrix[m, n]
+  numpy_array! : PyObject
+  n : DIM
+  m : DIM
+where
+  -- POST-CONDITIONS
+  -- Vector conversion
+  (julia_array : Vector[n] ⇒
+    numpy_array! = np.array(⟨julia_array(i) | i : 1..n⟩))
+  
+  -- Matrix conversion
+  ∨ (julia_array : Matrix[m, n] ⇒
+      numpy_array! = np.array(
+        ⟨⟨julia_array(i,j) | j : 1..n⟩ | i : 1..m⟩))
+  
+  -- Preserve dimensions
+  shape(numpy_array!) = 
+    if julia_array : Vector[n] 
+    then (n,)
+    else (m, n)
+  
+  -- Preserve data type (float64)
+  dtype(numpy_array!) = np.float64
+end
+
+/**
+ * NumPy to Julia Conversion Schema
+ * ----------------------------------
+ * Converts NumPy arrays to Julia arrays.
+ */
+schema ConvertFromNumPy
+  numpy_array : PyObject
+  julia_array! : Vector[n] ∨ Matrix[m, n]
+  n : DIM
+  m : DIM
+where
+  -- PRE-CONDITIONS
+  -- Input is a NumPy array
+  is_numpy_array(numpy_array)
+  
+  -- POST-CONDITIONS
+  -- 1D array conversion
+  (ndim(numpy_array) = 1 ⇒
+    let size = shape(numpy_array)(0) in
+      n = size ∧
+      julia_array! = ⟨numpy_array[i] | i : 0..size-1⟩)
+  
+  -- 2D array conversion
+  ∨ (ndim(numpy_array) = 2 ⇒
+      let rows = shape(numpy_array)(0)
+          cols = shape(numpy_array)(1)
+      in
+        m = rows ∧ n = cols ∧
+        julia_array! = 
+          ⟨⟨numpy_array[i,j] | j : 0..cols-1⟩ | i : 0..rows-1⟩)
+  
+  -- Preserve numerical values
+  ∀ idx : valid_indices(numpy_array) •
+    julia_array![idx] = numpy_array[idx]
+end
+
+/*
+ * ============================================================================
+ * SECTION 4: OPENCOG ATOMSPACE INTEGRATION (FUTURE)
+ * ============================================================================
+ */
+
+/**
+ * AtomSpace Node Schema
+ * ----------------------
+ * Represents a node in OpenCog AtomSpace.
+ */
+schema AtomSpaceNode
+  handle : ID
+  atom_type : {ConceptNode, PredicateNode, NumberNode, VariableNode}
+  name : STRING
+  truth_value : (ℝ × ℝ)  -- (strength, confidence)
+  attention_value : (ℝ × ℝ × ℝ)  -- (STI, LTI, VLTI)
+where
+  -- Truth value components are bounded
+  let (strength, confidence) = truth_value in
+    0.0 ≤ strength ≤ 1.0 ∧
+    0.0 ≤ confidence ≤ 1.0
+  
+  -- Attention value components are reasonable
+  let (sti, lti, vlti) = attention_value in
+    -1000.0 ≤ sti ≤ 1000.0 ∧
+    0.0 ≤ lti ≤ 1.0 ∧
+    0.0 ≤ vlti ≤ 1.0
+end
+
+/**
+ * AtomSpace Link Schema
+ * ----------------------
+ * Represents a link between nodes in AtomSpace.
+ */
+schema AtomSpaceLink
+  handle : ID
+  link_type : {InheritanceLink, SimilarityLink, ImplicationLink, 
+               EvaluationLink, ExecutionLink}
+  outgoing : seq ID
+  truth_value : (ℝ × ℝ)
+  attention_value : (ℝ × ℝ × ℝ)
+where
+  -- Links have at least one outgoing
+  #outgoing ≥ 1
+  
+  -- Truth value bounds
+  let (strength, confidence) = truth_value in
+    0.0 ≤ strength ≤ 1.0 ∧
+    0.0 ≤ confidence ≤ 1.0
+end
+
+/**
+ * Reservoir to AtomSpace Mapping Schema
+ * ---------------------------------------
+ * Maps reservoir states to AtomSpace representations.
+ */
+schema ReservoirToAtomSpace
+  reservoir_state : Vector[n]
+  atom_nodes! : seq AtomSpaceNode
+  n : DIM
+  threshold : BOUNDED_REAL
+where
+  -- PRE-CONDITIONS
+  -- Threshold for significant activations
+  0.1 ≤ threshold ≤ 0.5
+  
+  -- POST-CONDITIONS
+  -- Create concept nodes for significant activations
+  atom_nodes! = 
+    ⟨create_concept_node(i, reservoir_state(i)) | 
+     i : 1..n, |reservoir_state(i)| > threshold⟩
+  
+  -- Each node has truth value based on activation
+  ∀ node : ran atom_nodes! •
+    let (strength, confidence) = node.truth_value
+        activation = reservoir_state(node_index(node))
+    in
+      strength = (activation + 1.0) / 2.0 ∧  -- Map [-1,1] to [0,1]
+      confidence = |activation|
+  
+  -- Attention value based on activation magnitude
+  ∀ node : ran atom_nodes! •
+    let (sti, lti, vlti) = node.attention_value
+        activation = reservoir_state(node_index(node))
+    in
+      sti = 100.0 * |activation| ∧
+      lti = 0.5 ∧
+      vlti = 0.5
+end
+
+/*
+ * ============================================================================
+ * SECTION 5: ERROR HANDLING AND RECOVERY
+ * ============================================================================
+ */
+
+/**
+ * Integration Error Schema
+ * -------------------------
+ * Represents errors in external integrations.
+ */
+schema IntegrationError
+  error_type : {import_error, call_error, type_error, conversion_error,
+                network_error, timeout_error}
+  error_message : STRING
+  stack_trace : seq STRING
+  recoverable : 𝔹
+where
+  -- Import errors are typically not recoverable
+  error_type = import_error ⇒ recoverable = false
+  
+  -- Type and conversion errors may be recoverable
+  error_type ∈ {type_error, conversion_error} ⇒ recoverable = true
+  
+  -- Error message is non-empty
+  #error_message > 0
+end
+
+/**
+ * Retry Strategy Schema
+ * ----------------------
+ * Defines retry behavior for failed operations.
+ */
+schema RetryStrategy
+  max_retries : ℕ
+  retry_delay : ℕ  -- milliseconds
+  backoff_multiplier : ℝ
+  timeout : ℕ  -- milliseconds
+where
+  -- Reasonable retry limits
+  max_retries ≤ 5
+  
+  -- Delay constraints
+  100 ≤ retry_delay ≤ 5000
+  
+  -- Backoff multiplier for exponential backoff
+  1.0 ≤ backoff_multiplier ≤ 3.0
+  
+  -- Timeout is reasonable
+  1000 ≤ timeout ≤ 60000
+end
+
+/**
+ * Execute With Retry Operation
+ * ------------------------------
+ * Executes an external operation with retry logic.
+ */
+schema ExecuteWithRetry
+  operation : () → (𝔹 × T)
+  strategy : RetryStrategy
+  result! : T
+  success! : 𝔹
+where
+  -- POST-CONDITIONS
+  -- Attempt operation up to max_retries times
+  let attempts = execute_with_backoff(operation, strategy) in
+    (∃ i : 1..#attempts •
+      attempts(i) = (true, result!) ∧
+      success! = true ∧
+      i ≤ strategy.max_retries)
+    
+    -- All attempts failed
+    ∨ (#attempts = strategy.max_retries ∧
+       ∀ attempt : ran attempts • fst(attempt) = false ∧
+       success! = false)
+end
+
+/*
+ * ============================================================================
+ * SECTION 6: INTEGRATION HEALTH MONITORING
+ * ============================================================================
+ */
+
+/**
+ * Integration Health Schema
+ * --------------------------
+ * Monitors health of external integrations.
+ */
+schema IntegrationHealth
+  component : {reservoirpy, pycall, atomspace, network}
+  status : {healthy, degraded, failed, unknown}
+  last_check : ℕ  -- timestamp
+  error_count : ℕ
+  success_rate : BOUNDED_REAL
+  latency_ms : ℕ
+where
+  -- Success rate consistency
+  status = healthy ⇒ success_rate > 0.95
+  status = degraded ⇒ 0.7 ≤ success_rate ≤ 0.95
+  status = failed ⇒ success_rate < 0.7
+  
+  -- Error count affects status
+  error_count > 10 ⇒ status ≠ healthy
+  
+  -- Latency affects status
+  latency_ms > 5000 ⇒ status ≠ healthy
+end
+
+/**
+ * Monitor Integration Health Operation
+ * --------------------------------------
+ * Checks health of an external integration.
+ */
+schema MonitorIntegrationHealth
+  IntegrationHealth'
+  component? : {reservoirpy, pycall, atomspace, network}
+  health_report! : IntegrationHealth
+where
+  -- POST-CONDITIONS
+  -- Update component
+  component' = component?
+  
+  -- Perform health check
+  let ping_success = ping_component(component?)
+      current_time = get_timestamp()
+      recent_errors = count_recent_errors(component?, 60)
+      recent_successes = count_recent_successes(component?, 60)
+      total_recent = recent_errors + recent_successes
+  in
+    last_check' = current_time ∧
+    error_count' = recent_errors ∧
+    success_rate' = if total_recent > 0 
+                    then recent_successes / total_recent
+                    else 0.0 ∧
+    
+    -- Determine status
+    (ping_success ∧ success_rate' > 0.95 ⇒ status' = healthy)
+    ∨ (ping_success ∧ 0.7 ≤ success_rate' ≤ 0.95 ⇒ status' = degraded)
+    ∨ (¬ping_success ∨ success_rate' < 0.7 ⇒ status' = failed)
+    
+    -- Measure latency
+    ∧ latency_ms' = measure_latency(component?)
+  
+  -- Return health report
+  health_report! = IntegrationHealth'
+end
+
+/*
+ * ============================================================================
+ * AUXILIARY FUNCTIONS FOR INTEGRATIONS
+ * ============================================================================
+ */
+
+function pyimport : STRING → PyObject
+  -- Imports Python module via PyCall
+
+function convert_to_numpy : (Vector[n] ∨ Matrix[m,n]) → PyObject
+  -- Converts Julia array to NumPy array
+
+function convert_from_numpy : PyObject → (Vector[n] ∨ Matrix[m,n])
+  -- Converts NumPy array to Julia array
+
+function is_numpy_array : PyObject → 𝔹
+  -- Checks if PyObject is NumPy array
+
+function shape : PyObject → seq ℕ
+  -- Returns shape of NumPy array
+
+function ndim : PyObject → ℕ
+  -- Returns number of dimensions
+
+function dtype : PyObject → TYPE
+  -- Returns data type of array
+
+function ping_component : {reservoirpy, pycall, atomspace, network} → 𝔹
+  -- Checks if component is responsive
+
+function measure_latency : {reservoirpy, pycall, atomspace, network} → ℕ
+  -- Measures response time in milliseconds
+
+function get_timestamp : () → ℕ
+  -- Returns current timestamp
+
+function count_recent_errors : {reservoirpy, pycall, atomspace, network} × ℕ → ℕ
+  -- Counts errors in last N seconds
+
+function count_recent_successes : {reservoirpy, pycall, atomspace, network} × ℕ → ℕ
+  -- Counts successes in last N seconds
+
+/*
+ * ============================================================================
+ * END OF INTEGRATIONS SPECIFICATION
+ * ============================================================================
+ */
