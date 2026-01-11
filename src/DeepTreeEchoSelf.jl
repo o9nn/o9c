@@ -112,6 +112,7 @@ using LinearAlgebra
 using Statistics
 using Random
 using PyCall
+using SparseArrays
 
 # Export main types and functions
 export CognitiveArchitecture, PaunMembraneSystem, DeepTreeESN
@@ -125,6 +126,12 @@ export UniversalResonantArchetype, WisdomMetrics
 export converge_to_uesra!, compute_wisdom_score
 export ResonanceDetector, detect_resonance
 
+# Export tensor logic framework
+export TensorRelation, TensorLogicReasoner, KnowledgeBase
+export EmbeddingSpace, Rule
+export tensor_join, tensor_project, tensor_attention
+export forward_chain!, backward_chain, reason!, query
+
 include("paun_membranes.jl")
 include("deep_tree_esn.jl")
 include("butcher_series.jl")
@@ -133,5 +140,6 @@ include("emotion_theory.jl")
 include("transformer_integration.jl")
 include("cognitive_architecture.jl")
 include("unified_relations.jl")
+include("tensor_logic.jl")
 
 end # module
