@@ -39,6 +39,7 @@ println()
         @test isfile(joinpath(src_dir, "emotion_theory.jl"))
         @test isfile(joinpath(src_dir, "transformer_integration.jl"))
         @test isfile(joinpath(src_dir, "cognitive_architecture.jl"))
+        @test isfile(joinpath(src_dir, "unified_relations.jl"))
     end
 
     @testset "Documentation" begin
@@ -55,6 +56,7 @@ println()
         @test isfile(joinpath(@__DIR__, "test_emotion_theory.jl"))
         @test isfile(joinpath(@__DIR__, "test_transformer_integration.jl"))
         @test isfile(joinpath(@__DIR__, "test_cognitive_architecture.jl"))
+        @test isfile(joinpath(@__DIR__, "test_unified_relations.jl"))
     end
 
     @testset "Examples" begin
@@ -83,33 +85,37 @@ try
     # Load and run individual test files
     @testset "DeepTreeEchoSelf Full Test Suite" begin
 
-        println("\n[1/7] Testing Paun Membrane System...")
+        println("\n[1/8] Testing Paun Membrane System...")
         include("test_paun_membranes.jl")
         println("✓ Paun Membranes tests completed")
 
-        println("\n[2/7] Testing Deep Tree ESN...")
+        println("\n[2/8] Testing Deep Tree ESN...")
         include("test_deep_tree_esn.jl")
         println("✓ Deep Tree ESN tests completed")
 
-        println("\n[3/7] Testing Butcher B-Series...")
+        println("\n[3/8] Testing Butcher B-Series...")
         include("test_butcher_series.jl")
         println("✓ Butcher B-Series tests completed")
 
-        println("\n[4/7] Testing J-Surface Differentials...")
+        println("\n[4/8] Testing J-Surface Differentials...")
         include("test_j_surface.jl")
         println("✓ J-Surface tests completed")
 
-        println("\n[5/7] Testing Emotion Theory...")
+        println("\n[5/8] Testing Emotion Theory...")
         include("test_emotion_theory.jl")
         println("✓ Emotion Theory tests completed")
 
-        println("\n[6/7] Testing Transformer Integration...")
+        println("\n[6/8] Testing Transformer Integration...")
         include("test_transformer_integration.jl")
         println("✓ Transformer Integration tests completed")
 
-        println("\n[7/7] Testing Cognitive Architecture...")
+        println("\n[7/8] Testing Cognitive Architecture...")
         include("test_cognitive_architecture.jl")
         println("✓ Cognitive Architecture tests completed")
+
+        println("\n[8/8] Testing Unified Relations Framework...")
+        include("test_unified_relations.jl")
+        println("✓ Unified Relations tests completed")
 
     end
 

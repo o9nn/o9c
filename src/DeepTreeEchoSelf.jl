@@ -119,6 +119,12 @@ export ButcherBSeriesForest, JSurfaceDifferential
 export DifferentialEmotionTheory, AffectiveAgency
 export process, analyze_emergence
 
+# Export unified relations framework
+export CouplingConstants, UnifiedState, UnifiedEvolutionOperator
+export UniversalResonantArchetype, WisdomMetrics
+export converge_to_uesra!, compute_wisdom_score
+export ResonanceDetector, detect_resonance
+
 include("paun_membranes.jl")
 include("deep_tree_esn.jl")
 include("butcher_series.jl")
@@ -126,5 +132,6 @@ include("j_surface.jl")
 include("emotion_theory.jl")
 include("transformer_integration.jl")
 include("cognitive_architecture.jl")
+include("unified_relations.jl")
 
 end # module
