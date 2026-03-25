@@ -39,6 +39,7 @@ Following DET, we implement these fundamental emotions:
 
 using LinearAlgebra
 using Random
+using Statistics
 
 """
     Emotion
@@ -312,7 +313,7 @@ function modulate_attention(agency::AffectiveAgency, base_attention::Vector{Floa
     if scope > 0.5
         # Broaden: reduce differences
         mean_attn = mean(base_attention)
-        modulated = scope * base_attention + (1 - scope) * mean_attn
+        modulated = scope * base_attention .+ (1 - scope) * mean_attn
     else
         # Narrow: amplify differences  
         modulated = base_attention .^ (1.0 / (scope + 0.1))

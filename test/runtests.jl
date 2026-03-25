@@ -1,11 +1,22 @@
 """
-Basic smoke test for DeepTreeEchoSelf framework
+Test suite for DeepTreeEchoSelf framework.
+
+Organized in two layers:
+  1. Component unit tests - run standalone without external dependencies.
+  2. Basic smoke tests  - file structure, documentation, and module-load check.
 """
 
 using Test
 
 # Add the src directory to the load path
 push!(LOAD_PATH, joinpath(@__DIR__, "../src"))
+
+# ── Component unit tests (stdlib only, always runnable) ────────────────────────
+
+include("test_emotion_theory.jl")
+include("test_deep_tree_esn.jl")
+
+# ── Basic smoke tests ──────────────────────────────────────────────────────────
 
 @testset "DeepTreeEchoSelf Basic Tests" begin
     
@@ -35,11 +46,14 @@ push!(LOAD_PATH, joinpath(@__DIR__, "../src"))
     end
     
     @testset "Examples" begin
-        @test isfile(joinpath(@__DIR__, "../examples/demo_emergence.jl"))
+        examples_dir = joinpath(@__DIR__, "../examples")
+        @test isfile(joinpath(examples_dir, "demo_emergence.jl"))
+        @test isfile(joinpath(examples_dir, "learning_example.jl"))
+        @test isfile(joinpath(examples_dir, "multi_agent_example.jl"))
     end
     
 end
 
-println("\n✓ Basic structure tests passed!")
-println("Note: Full functionality tests require dependencies to be installed.")
+println("\n✓ All tests passed!")
+println("Note: Full integration tests require external dependencies.")
 println("Run: julia --project=. -e 'using Pkg; Pkg.instantiate()' to install dependencies.")
