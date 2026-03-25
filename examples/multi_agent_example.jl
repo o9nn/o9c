@@ -16,7 +16,7 @@ Steps:
   1. Create two agents with contrasting personas
   2. Run a shared stimulus sequence
   3. Apply social emotion coupling between agents
-  4. Compare and analyse emergence metrics for both agents
+  4. Compare and analyze emergence metrics for both agents
 """
 
 push!(LOAD_PATH, joinpath(@__DIR__, "../src"))
@@ -64,7 +64,7 @@ println()
     couple_emotions!(source, target; coupling_strength=0.2)
 
 Broadcast the dominant emotion from `source` to `target` with a given
-coupling strength, modelling social emotion contagion.
+coupling strength, modeling social emotion contagion.
 """
 function couple_emotions!(source::CognitiveArchitecture,
                           target::CognitiveArchitecture;
@@ -182,7 +182,7 @@ println("   - Scholar: higher coherence & stability (deep processing)")
 println("   - Explorer: higher adaptability (fast, broad responses)")
 println()
 println("2. Social emotion coupling gradually aligns emotional baselines,")
-println("   modelling how shared experiences create shared meaning.")
+println("   modeling how shared experiences create shared meaning.")
 println()
 println("3. Despite different starting points, collective processing of the")
 println("   same stimulus leads the two agents toward similar wisdom metrics,")

@@ -94,8 +94,11 @@ include(joinpath(@__DIR__, "../src/emotion_theory.jl"))
         trigger_emotion!(det, :joy, -0.5)
         @test det.emotions[:joy].intensity == 0.0
 
-        # Unknown emotion: should not error
+        # Unknown emotion: should not error and must not modify the dict
+        joy_before = det.emotions[:joy].intensity
         @test_nowarn trigger_emotion!(det, :unknown_emotion, 0.5)
+        @test det.emotions[:joy].intensity == joy_before  # existing emotion unchanged
+        @test !haskey(det.emotions, :unknown_emotion)     # new key not created
     end
 
     @testset "update_emotions! decay" begin
